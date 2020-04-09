@@ -1,7 +1,7 @@
 """Weekly reports"""
 
 from common.common import extract_day
-from etl.extract import NOW, long_term_sortaments
+from etl.extract import (NOW, replacements)
 from pandas import (
     DataFrame, pivot_table, Series, concat
 )
@@ -84,7 +84,7 @@ def weekly_tables(
     long_nomenclature_orders(data=output_req, sep_date=sep_date)
 
 
-def operations_table(oper_: list) -> DataFrame:
+def operations_table(oper_: DataFrame) -> DataFrame:
     """
     Главная задача функции - установка даты учета на основании дат заказа или дат поступлений
     Если списание не из поступлений, то 'Дата учета' = 'Дата списания остат'
@@ -97,15 +97,7 @@ def operations_table(oper_: list) -> DataFrame:
     :param oper_: список операций
     :return: отформатированная таблица с операциями
     """
-    columns = [
-        'Дата потребности', 'Порядковый номер', 
-        'Заказ-Партия', 'Номенклатура потребности', 
-        'Потребность из файла', 'Потребность нач', 
-        'Потребность кон', 'Списание потребности', 
-        'Склад', 'Дата списания остат', 'Номенклатура Списания', 
-        'Остатки нач', 'Остатки кон', 'Списание остатков'
-    ]
-    table = DataFrame(data=oper_, columns=columns)
+    table = oper_.copy()
     table['Дата учета'] = table['Дата потребности'].where(
         table['Склад'] != 'Поступления', table['Дата списания остат']
     )

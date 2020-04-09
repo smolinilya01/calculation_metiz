@@ -53,6 +53,7 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     data['Заказ-Партия'] = data['Номер победы'] + "-" + data['Партия']
     data['Изделие'] = modify_col(data['Изделие'], instr=1).map(extract_product_name)
     data['Нельзя_заменять'] = 0  # в будущем в выгрузку добавиться колонка о запрете замены
+    data['Количество штук'] = data['Количество штук'].map(in_float)
 
     # добавляет колонки 'Закуп подтвержден', 'Возможный заказ' по данным из ПОБЕДЫ
     appr_orders = approved_orders(tuple(data['Номер победы'].unique()))
@@ -75,12 +76,12 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
         data = data.sort_values(by='Дата запуска')  # сортировка потребности и определение
 
     data = data.reset_index().rename(columns={'index': 'Поряд_номер'})  # определение поряд номера
-    data.to_csv(
-        f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\requirements_mtz {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
-        sep=";",
-        encoding='ansi',
-        index=False
-    )  # запись используемых файлов, для взгляда в прошлое
+    # data.to_csv(
+    #     f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\requirements_mtz {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+    #     sep=";",
+    #     encoding='ansi',
+    #     index=False
+    # )  # запись используемых файлов, для взгляда в прошлое
 
     logging.info('Потребность загрузилась')
     return data
@@ -122,7 +123,7 @@ def nomenclature() -> DataFrame:
     replacements_pokrit['Покрытие'] = replacements_pokrit['Покрытие'].map(int)
     replacements_pokrit = replacements_pokrit.sort_values(by='Покрытие')
     replacements_pokrit['Покрытие'] = 'ТД' + replacements_pokrit['Покрытие'].map(str)
-    replacements_pokrit = concat([DataFrame(data=['ГЛ'], columns=['Покрытие']), replacements_pokrit])
+    replacements_pokrit = concat([DataFrame(data=['Гл'], columns=['Покрытие']), replacements_pokrit])
     replacements_pokrit = concat([replacements_pokrit, DataFrame(data=['ГЦ'], columns=['Покрытие'])])
     replacements_pokrit.to_csv(
         r".\support_data\outloads\dict_replacement_pokrit.csv",
@@ -132,7 +133,7 @@ def nomenclature() -> DataFrame:
     )
     data['Покрытие'] = data['Покрытие'].\
         where(data['Покрытие'] == '', 'ТД' + data['Покрытие']).\
-        where(~data['Номенклатура'].str.contains(r'Гл|ГЛ', regex=True), 'ГЛ' + data['Покрытие']).\
+        where(~data['Номенклатура'].str.contains(r'Гл|ГЛ', regex=True), 'Гл' + data['Покрытие']).\
         where(~data['Номенклатура'].str.contains(r'ГЦ|Гц', regex=True), 'ГЦ' + data['Покрытие'])
 
     # Работы с классом прочности
@@ -179,10 +180,12 @@ def replacements(path: str) -> DataFrame:
     return data
 
 
-def center_rests(nom_: DataFrame) -> DataFrame:
+def center_rests(dictionary: DataFrame, daily=False) -> DataFrame:
     """Загузка таблицы с остатками на центральном складе, форматирование таблицы.
+    Колонка с количеством остатком должна иметь наименование "Количество".
 
-    :param nom_: таблица из nomenclature() - справочник номенклатуры
+    :param dictionary: таблица из nomenclature() - справочник номенклатуры
+    :param daily: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
     path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metizi (ANSITXT).txt"
     data = read_csv(
@@ -196,23 +199,26 @@ def center_rests(nom_: DataFrame) -> DataFrame:
     data = data[data['Количество'] > 0]
     data['Склад'] = 'Центральный склад'  # Склады центральные по металлу, метизам и вход контроля
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
-    data = data.merge(nom_[['Номенклатура', 'Сортамет+Марка']], on='Номенклатура', how='left')
-    # соединение с таблицей из номенклатуры
-    data.to_csv(
-        f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\rests_center_mtz {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
-        sep=";",
-        encoding='ansi',
-        index=False
-    )  # запись используемых файлов, для взгляда в прошлое
+    data = data.merge(dictionary, on='Номенклатура', how='left')
+
+    if daily is True:
+        data.to_csv(
+            f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\rests_center_mtz {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+            sep=";",
+            encoding='ansi',
+            index=False
+        )  # запись используемых файлов, для взгляда в прошлое
 
     logging.info('Остатки центрального склада загрузились')
     return data
 
 
-def tn_rests(nom_: DataFrame) -> DataFrame:
-    """Загрузка таблицы с остатками на складе ТН, форматирование таблицы.
+def tn_rests(dictionary: DataFrame, daily=False) -> DataFrame:
+    """Загузка таблицы с остатками на центральном складе, форматирование таблицы.
+    Колонка с количеством остатком должна иметь наименование "Количество".
 
-    :param nom_: таблица из nomenclature() - справочник номенклатуры
+    :param dictionary: таблица из nomenclature() - справочник номенклатуры
+    :param daily: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
     path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metal_tn (ANSITXT).txt"
     data = read_csv(
@@ -225,22 +231,26 @@ def tn_rests(nom_: DataFrame) -> DataFrame:
     data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
     data['Склад'] = 'ТН'
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
-    data = data.merge(nom_[['Номенклатура', 'Сортамет+Марка']], on='Номенклатура', how='left')
-    data.to_csv(
-        f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_tn {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
-        sep=";",
-        encoding='ansi',
-        index=False
-    )  # запись используемых файлов, для взгляда в прошлое
+    data = data.merge(dictionary, on='Номенклатура', how='left')
+
+    if daily is True:
+        data.to_csv(
+            f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_tn {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+            sep=";",
+            encoding='ansi',
+            index=False
+        )  # запись используемых файлов, для взгляда в прошлое
 
     logging.info('Остатки склада ТН загрузились')
     return data
 
 
-def future_inputs(nom_: DataFrame) -> DataFrame:
-    """Загрузка таблицы с поступлениями, форматирование таблицы.
+def future_inputs(dictionary: DataFrame, daily=False) -> DataFrame:
+    """Загузка таблицы с остатками на центральном складе, форматирование таблицы.
+    Колонка с количеством остатком должна иметь наименование "Количество".
 
-    :param nom_: таблица из nomenclature() - справочник номенклатуры
+    :param dictionary: таблица из nomenclature() - справочник номенклатуры
+    :param daily: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
     path = r'support_data/outloads/rest_futures_inputs.csv'
     data = read_csv(
@@ -255,7 +265,15 @@ def future_inputs(nom_: DataFrame) -> DataFrame:
     data = data.\
         fillna(0).\
         sort_values(by='Дата')
-    data = data.merge(nom_[['Номенклатура', 'Сортамет+Марка']], on='Номенклатура', how='left')
+    data = data.merge(dictionary, on='Номенклатура', how='left')
+
+    if daily is True:
+        data.to_csv(
+            f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_fut_inputs {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+            sep=";",
+            encoding='ansi',
+            index=False
+        )  # запись используемых файлов, для взгляда в прошлое
 
     logging.info('Поступления загрузились')
     return data

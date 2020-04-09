@@ -14,8 +14,9 @@ from etl.extract import (
     PATH_LON_SORT
 )
 from common.common import check_calculation_right
+from reports.weekly import weekly_tables
+from reports.excel import weekly_excel_reports
 from datetime import datetime
-from reports.main import weekly_reports
 
 
 def main() -> None:
@@ -29,12 +30,10 @@ def main() -> None:
     dict_repl_gost = replacements(PATH_REP_GOST)
     dict_repl_pokr = replacements(PATH_REP_POKR)
     dict_repl_prochn = replacements(PATH_REP_PROCHN)
-    dict_long_sort= replacements(PATH_LON_SORT)
-    start_rest_center = center_rests(nom_=dict_nom)
-    start_rest_tn = tn_rests(nom_=dict_nom)
-    start_fut = future_inputs(nom_=dict_nom)
+    start_rest_center = center_rests(dictionary=dict_nom)
+    start_rest_tn = tn_rests(dictionary=dict_nom)
+    start_fut = future_inputs(dictionary=dict_nom)
     start_ask = requirements()
-
     end_rest_center = start_rest_center.copy()
     end_rest_tn = start_rest_tn.copy()
     end_fut = start_fut.copy()
@@ -48,26 +47,37 @@ def main() -> None:
         fut=end_fut,
         oper_=operations,
         nom_=dict_nom,
-        repl_=dict_repl
+        repl_={
+            'mark': dict_repl_mark,
+            'gost': dict_repl_gost,
+            'pokr': dict_repl_pokr,
+            'prochn': dict_repl_prochn
+        }
     )
+    end_ask.to_csv('end_ask.csv', sep=";", encoding='ansi', index=False)
+    end_rest_tn.to_csv('end_rest_tn.csv', sep=";", encoding='ansi', index=False)
+    end_rest_center.to_csv('end_rest_center.csv', sep=";", encoding='ansi', index=False)
+    end_fut.to_csv('end_fut.csv', sep=";", encoding='ansi', index=False)
+    operations.to_csv('operations.csv', sep=";", encoding='ansi', index=False)
 
-    check_calculation_right(
-        start_ask_=start_ask,
-        end_ask_=end_ask,
-        start_c_=start_rest_center,
-        end_c_=end_rest_center,
-        start_tn_=start_rest_tn,
-        end_tn_=end_rest_tn,
-        start_fut_=start_fut,
-        end_fut_=end_fut,
-    )
+    # check_calculation_right(
+    #     start_ask_=start_ask,
+    #     end_ask_=end_ask,
+    #     start_c_=start_rest_center,
+    #     end_c_=end_rest_center,
+    #     start_tn_=start_rest_tn,
+    #     end_tn_=end_rest_tn,
+    #     start_fut_=start_fut,
+    #     end_fut_=end_fut,
+    # )
 
-    weekly_reports(
-        start_ask_=start_ask,
-        end_ask_=end_ask,
-        oper_=operations,
-        sep_date=separate_date
-    )
+    # weekly_tables(
+    #     start_ask_=start_ask,
+    #     end_ask_=end_ask,
+    #     oper_=operations,
+    #     sep_date=separate_date
+    # )
+    # weekly_excel_reports()
 
 
 if __name__ == '__main__':
