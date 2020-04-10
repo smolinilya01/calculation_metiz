@@ -149,8 +149,8 @@ def replacement(
             'prochn': dict_repl_prochn
         }
     """
-    if table.at[ind, 'Дефицит'] == 0:
-        return None  # быстрый выход из списания, если потребность = 0
+    if table.at[ind, 'Дефицит'] == 0 or table.at[ind, 'Нельзя_заменять'] == 1:
+        return None  # быстрый выход из списания, если потребность = 0 или нельзя менять
 
     cur_nom = table.at[ind, 'Номенклатура']
     if len(nom_[nom_['Номенклатура'] == cur_nom]) == 0:

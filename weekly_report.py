@@ -10,8 +10,7 @@ from etl.extract import (
 )
 from etl.extract import (
     PATH_REP_MARK, PATH_REP_GOST,
-    PATH_REP_POKR, PATH_REP_PROCHN,
-    PATH_LON_SORT
+    PATH_REP_POKR, PATH_REP_PROCHN
 )
 from common.common import check_calculation_right
 from reports.weekly import weekly_tables
@@ -54,30 +53,25 @@ def main() -> None:
             'prochn': dict_repl_prochn
         }
     )
-    end_ask.to_csv('end_ask.csv', sep=";", encoding='ansi', index=False)
-    end_rest_tn.to_csv('end_rest_tn.csv', sep=";", encoding='ansi', index=False)
-    end_rest_center.to_csv('end_rest_center.csv', sep=";", encoding='ansi', index=False)
-    end_fut.to_csv('end_fut.csv', sep=";", encoding='ansi', index=False)
-    operations.to_csv('operations.csv', sep=";", encoding='ansi', index=False)
 
-    # check_calculation_right(
-    #     start_ask_=start_ask,
-    #     end_ask_=end_ask,
-    #     start_c_=start_rest_center,
-    #     end_c_=end_rest_center,
-    #     start_tn_=start_rest_tn,
-    #     end_tn_=end_rest_tn,
-    #     start_fut_=start_fut,
-    #     end_fut_=end_fut,
-    # )
+    check_calculation_right(
+        start_ask_=start_ask,
+        end_ask_=end_ask,
+        start_c_=start_rest_center,
+        end_c_=end_rest_center,
+        start_tn_=start_rest_tn,
+        end_tn_=end_rest_tn,
+        start_fut_=start_fut,
+        end_fut_=end_fut,
+    )
 
-    # weekly_tables(
-    #     start_ask_=start_ask,
-    #     end_ask_=end_ask,
-    #     oper_=operations,
-    #     sep_date=separate_date
-    # )
-    # weekly_excel_reports()
+    weekly_tables(
+        start_ask_=start_ask,
+        end_ask_=end_ask,
+        oper_=operations,
+        sep_date=separate_date
+    )
+    weekly_excel_reports()
 
 
 if __name__ == '__main__':

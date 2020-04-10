@@ -76,12 +76,6 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
         data = data.sort_values(by='Дата запуска')  # сортировка потребности и определение
 
     data = data.reset_index().rename(columns={'index': 'Поряд_номер'})  # определение поряд номера
-    # data.to_csv(
-    #     f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\requirements_mtz {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
-    #     sep=";",
-    #     encoding='ansi',
-    #     index=False
-    # )  # запись используемых файлов, для взгляда в прошлое
 
     logging.info('Потребность загрузилась')
     return data
@@ -180,12 +174,12 @@ def replacements(path: str) -> DataFrame:
     return data
 
 
-def center_rests(dictionary: DataFrame, daily=False) -> DataFrame:
+def center_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     """Загузка таблицы с остатками на центральном складе, форматирование таблицы.
     Колонка с количеством остатком должна иметь наименование "Количество".
 
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
-    :param daily: если True, то запись остаток в папку для сохранения прошлых расчетов
+    :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
     path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metizi (ANSITXT).txt"
     data = read_csv(
@@ -201,7 +195,7 @@ def center_rests(dictionary: DataFrame, daily=False) -> DataFrame:
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
     data = data.merge(dictionary, on='Номенклатура', how='left')
 
-    if daily is True:
+    if short_term_plan is True:
         data.to_csv(
             f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\rests_center_mtz {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
             sep=";",
@@ -213,12 +207,12 @@ def center_rests(dictionary: DataFrame, daily=False) -> DataFrame:
     return data
 
 
-def tn_rests(dictionary: DataFrame, daily=False) -> DataFrame:
+def tn_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     """Загузка таблицы с остатками на центральном складе, форматирование таблицы.
     Колонка с количеством остатком должна иметь наименование "Количество".
 
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
-    :param daily: если True, то запись остаток в папку для сохранения прошлых расчетов
+    :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
     path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metal_tn (ANSITXT).txt"
     data = read_csv(
@@ -233,7 +227,7 @@ def tn_rests(dictionary: DataFrame, daily=False) -> DataFrame:
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
     data = data.merge(dictionary, on='Номенклатура', how='left')
 
-    if daily is True:
+    if short_term_plan is True:
         data.to_csv(
             f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_tn {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
             sep=";",
@@ -245,12 +239,12 @@ def tn_rests(dictionary: DataFrame, daily=False) -> DataFrame:
     return data
 
 
-def future_inputs(dictionary: DataFrame, daily=False) -> DataFrame:
+def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     """Загузка таблицы с остатками на центральном складе, форматирование таблицы.
     Колонка с количеством остатком должна иметь наименование "Количество".
 
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
-    :param daily: если True, то запись остаток в папку для сохранения прошлых расчетов
+    :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
     path = r'support_data/outloads/rest_futures_inputs.csv'
     data = read_csv(
@@ -267,7 +261,8 @@ def future_inputs(dictionary: DataFrame, daily=False) -> DataFrame:
         sort_values(by='Дата')
     data = data.merge(dictionary, on='Номенклатура', how='left')
 
-    if daily is True:
+    if short_term_plan is True:
+        data = data[data['Дата'] <= NOW + timedelta(days=DAYS_AFTER)]  # только поступления в нужном периоде
         data.to_csv(
             f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_fut_inputs {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
             sep=";",

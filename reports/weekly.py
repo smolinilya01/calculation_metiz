@@ -1,7 +1,7 @@
 """Weekly reports"""
 
 from common.common import extract_day
-from etl.extract import (NOW, replacements)
+from etl.extract import (NOW, PATH_LON_SORT, replacements)
 from pandas import (
     DataFrame, pivot_table, Series, concat
 )
@@ -11,7 +11,7 @@ from datetime import datetime
 def weekly_tables(
         start_ask_: DataFrame, 
         end_ask_: DataFrame,
-        oper_: list,
+        oper_: DataFrame,
         sep_date: datetime = None
 ) -> None:
     """Подготовка таблиц для недельных отчетов
@@ -21,18 +21,18 @@ def weekly_tables(
     :param oper_: список операций
     :param sep_date: Дата разделения краткосрочного периода и долгосрочного = последний день краткосрочного
     """
-    need_columns = [
+    oper_columns = [
         'Заказ-Партия', 'Номенклатура потребности',
         'Склад', 'Списание потребности'
     ]
-    group_columns = [
+    oper_gr_columns = [
         'Заказ-Партия', 'Номенклатура потребности',
         'Склад'
     ]
 
     # oper_write_off - укороченная версия operations_table для мержа к output_req
     oper_write_off = operations_table(oper_)
-    oper_write_off = oper_write_off[need_columns].groupby(group_columns).sum().reset_index()
+    oper_write_off = oper_write_off[oper_columns].groupby(oper_gr_columns).sum().reset_index()
 
     center_write_off = write_off_tables(
         table_=oper_write_off, 
@@ -61,27 +61,29 @@ def weekly_tables(
     # detail_table - таблица для краткосрочного закупа
     if sep_date is None:  # если None, то для дефицита ежедневного и далее ну нужно идти
         return None
+    else:
+        # подготовка detail.csv
+        make_detail_table(data=output_req, sep_date=sep_date)
 
-    make_detail_table(data=output_req, sep_date=sep_date)
+        # подготовка graf.csv и graf_without_feat.csv
+        # эти графики только для краткосрочного периода
+        short_term = output_req[output_req['Дата запуска'] <= sep_date]
+        graph(table_=short_term, method='with_future_inputs')
+        graph(table_=short_term, method='without_future_inputs')
 
-    # графики подготавливаются только для короткого периода
-    short_term = output_req[output_req['Дата запуска'] <= sep_date]
-    graph(table_=short_term, method='with_future_inputs')
-    graph(table_=short_term, method='without_future_inputs')
+        # подготовка problem_orders.csv
+        # это заказы с проблемами для краткосрочной и долгосрочной перспективы
+        unpr_orders = make_unapproved_orders(data=output_req, sep_date=sep_date)
+        unpr_long_orders = make_unapproved_long_orders(data=output_req, sep_date=sep_date)
+        problem_orders = concat([unpr_orders, unpr_long_orders], axis=0)
+        problem_orders.to_csv(
+            r".\support_data\data_for_reports\problem_orders.csv",
+            sep=";", encoding='ansi', index=False
+        )
 
-    # подготовка неподтвержденных краткосрочных заказов
-    unpr_orders = make_unapproved_orders(data=output_req, sep_date=sep_date)
-
-    # подготовка неподтвержденных долгосрочных заказов с длинной номенклатурой
-    unpr_long_orders = make_unapproved_long_orders(data=output_req, sep_date=sep_date)
-
-    problem_orders = concat([unpr_orders, unpr_long_orders], axis=0)
-    problem_orders.to_csv(
-        r".\support_data\data_for_reports\problem_orders.csv",
-        sep=";", encoding='ansi', index=False
-    )
-    # подготовка дефицита длинной номенклатуры в долгосрочной перспективе
-    long_nomenclature_orders(data=output_req, sep_date=sep_date)
+        # подготовка long_nomenclature_orders.csv и long_nomenclature_possible_orders.csv
+        # это дефицит длинной номенклатуры в долгосрочной перспективе
+        long_nomenclature_orders(data=output_req, sep_date=sep_date)
 
 
 def operations_table(oper_: DataFrame) -> DataFrame:
@@ -272,10 +274,10 @@ def make_unapproved_orders(data: DataFrame, sep_date: datetime) -> DataFrame:
         (data['Количество в заказе'] != 0) &
         (data['Дата запуска'] <= sep_date)
         ][[
-        'Дата запуска', 'Заказ-Партия', 'Заказчик',
-        'Спецификация', 'Номенклатура',
-        'Количество в заказе', 'Перемещено'
-    ]]
+            'Дата запуска', 'Заказ-Партия', 'Заказчик',
+            'Спецификация', 'Номенклатура',
+            'Количество в заказе', 'Перемещено'
+        ]]
     unapproved_orders['Количество в заказе'] = (
             unapproved_orders['Количество в заказе'] - unapproved_orders['Перемещено']
     )
@@ -287,12 +289,12 @@ def make_unapproved_orders(data: DataFrame, sep_date: datetime) -> DataFrame:
 
 
 def make_unapproved_long_orders(data: DataFrame, sep_date: datetime) -> DataFrame:
-    """Подготавливает таблицу с неподтвержденными к закупу заказами в краткосрочном периоде
+    """Подготавливает таблицу с неподтвержденными к закупу заказами в долгосрочной периоде
 
     :param data: output_req
     :param sep_date: Дата разделения краткосрочного периода и долгосрочного = последний день краткосрочного
     """
-    lts = long_term_sortaments()
+    lts = replacements(PATH_LON_SORT)
     unapproved_long_orders = data[
         (data['Заказ обеспечен'] == 0) &
         (data['Пометка удаления'] == 0) &
@@ -337,7 +339,7 @@ def long_nomenclature_orders(data: DataFrame, sep_date: datetime) -> None:
     :param data: output_req
     :param sep_date: Дата разделения краткосрочного периода и долгосрочного = последний день краткосрочного
     """
-    lts = long_term_sortaments()
+    lts = replacements(PATH_LON_SORT)
     lmo = data[
         (data['Заказ обеспечен'] == 0) &
         (data['Пометка удаления'] == 0) &
