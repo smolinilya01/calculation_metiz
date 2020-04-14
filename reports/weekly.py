@@ -208,7 +208,14 @@ def graph(table_: DataFrame, method: str) -> None:
         (need_table['Остаток дефицита'] > 0) &
         (need_table['Заказ обеспечен'] == 0) &
         (need_table['Пометка удаления'] == 0)
-        ]
+        ].copy()
+    # для схлопывания указанных гостов
+    clean_for_graf['Номенклатура'] = clean_for_graf['Номенклатура'].map(
+        lambda x: (x.
+                   replace('ГОСТ 7798-70', 'ГОСТ Р ИСО 4014-2013').
+                   replace('ГОСТ Р ИСО 4017-2013', 'ГОСТ Р ИСО 4014-2013').
+                   replace('ГОСТ 5915-70', 'ГОСТ ISO 4032-2014'))
+    )
 
     # graph_ - график-календарь по дням и по номенклатурам из поребностей
     graph_ = pivot_table(
@@ -324,10 +331,13 @@ def make_unapproved_long_orders(data: DataFrame, sep_date: datetime) -> DataFram
 
 
 def check_long_nomenclature(x: str, list_long_sort: DataFrame) -> int:
-    """Проверяет является ли номенклатура длинной, считает очень долго"""
-    list_long_sort = list(list_long_sort['Сортамент'].copy().values)
-    for sortam in list_long_sort:
-        if sortam in str(x):
+    """Проверяет является ли номенклатура длинной, считает очень долго
+
+    :param x: значение = наименование номенклатуры
+    :param list_long_sort: список длинным номенклатур(сортаментов)
+    """
+    for long_sortam in list_long_sort.loc[:, 'Сортамент']:
+        if long_sortam in str(x):
             return 1
     return 0
 
