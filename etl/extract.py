@@ -58,7 +58,8 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     # добавляет колонки 'Закуп подтвержден', 'Возможный заказ' по данным из ПОБЕДЫ
     appr_orders = approved_orders(tuple(data['Номер победы'].unique()))
     data = merge(data, appr_orders, how='left', on='Номер победы', copy=False)
-    data['Дефицит'] = data['Количество в заказе'] - data['Перемещено']
+    data['Дефицит'] = (data['Количество в заказе'] - data['Перемещено']).\
+        map(lambda x: 0 if x < 0 else x)
     data['Дефицит'] = data['Дефицит'].where(
         (data['Заказ обеспечен'] == 0) &
         (data['Пометка удаления'] == 0) &
