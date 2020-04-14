@@ -19,7 +19,7 @@ def daily_tables() -> None:
         dtype={'Номер победы': 'object'}
     )
     output_req.to_csv(
-        f'W:\\Analytics\\Илья\\!deficit_work_files\\ask {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+        f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\ask {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
         sep=";",
         encoding='ansi',
         index=False
