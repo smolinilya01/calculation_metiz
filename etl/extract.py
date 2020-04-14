@@ -151,17 +151,6 @@ def nomenclature() -> DataFrame:
     return data
 
 
-# def create_sortam(x) -> str:
-#     """Создание сортамента из наименования, вида и госта"""
-#     nom, vid, gost = str(x[0]).strip(), str(x[1]).strip(), str(x[2]).strip()
-#     if '' in [nom, vid, gost]:
-#         return ''
-#
-#     sortam = re.search(f'{vid}(\s*.+)\s*{gost}', nom).group(1)
-#
-#     return vid + sortam.rstrip()
-
-
 def replacements(path: str) -> DataFrame:
     """Загузка таблицы с заменами или другого справочника (пути к заменам находятся в константах)
 
@@ -247,6 +236,17 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
     :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
+    # path = r"W:\Analytics\Илья\!outloads\Остатки заказов поставщикам метизы (ANSITXT).txt"
+    # data = read_csv(
+    #     path,
+    #     sep=';',
+    #     encoding='ansi',
+    #     usecols=['Дата поступления', 'Номенклатура', 'Заказано остаток'],
+    #     parse_dates=['Дата поступления'],
+    #     dayfirst=True
+    # ).rename(
+    #     columns={'Дата поступления': 'Дата', 'Заказано остаток': 'Количество'}
+    # )
     path = r'support_data/outloads/rest_futures_inputs.csv'
     data = read_csv(
         path,
