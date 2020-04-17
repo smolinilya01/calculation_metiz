@@ -54,6 +54,7 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     data['Изделие'] = modify_col(data['Изделие'], instr=1).map(extract_product_name)
     data['Нельзя_заменять'] = 0  # в будущем в выгрузку добавиться колонка о запрете замены
     data['Количество штук'] = data['Количество штук'].map(in_float)
+    data['Документ заказа.Статус'] = data['Количество штук'].map(in_float)
 
     # добавляет колонки 'Закуп подтвержден', 'Возможный заказ' по данным из ПОБЕДЫ
     appr_orders = approved_orders(tuple(data['Номер победы'].unique()))
@@ -76,7 +77,10 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     else:
         data = data.sort_values(by='Дата запуска')  # сортировка потребности и определение
 
-    data = data.reset_index().rename(columns={'index': 'Поряд_номер'})  # определение поряд номера
+    data = data.reset_index().rename(columns={
+        'index': 'Поряд_номер',
+        'Документ заказа.Статус': 'Статус'
+    })  # определение поряд номера
 
     logging.info('Потребность загрузилась')
     return data
@@ -236,24 +240,16 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
     :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
-    # path = r"W:\Analytics\Илья\!outloads\Остатки заказов поставщикам метизы (ANSITXT).txt"
-    # data = read_csv(
-    #     path,
-    #     sep=';',
-    #     encoding='ansi',
-    #     usecols=['Дата поступления', 'Номенклатура', 'Заказано остаток'],
-    #     parse_dates=['Дата поступления'],
-    #     dayfirst=True
-    # ).rename(
-    #     columns={'Дата поступления': 'Дата', 'Заказано остаток': 'Количество'}
-    # )
-    path = r'support_data/outloads/rest_futures_inputs.csv'
+    path = r"W:\Analytics\Илья\!outloads\Остатки заказов поставщикам метизы (ANSITXT).txt"
     data = read_csv(
         path,
         sep=';',
         encoding='ansi',
-        parse_dates=['Дата'],
+        usecols=['Дата поступления', 'Номенклатура', 'Заказано остаток'],
+        parse_dates=['Дата поступления'],
         dayfirst=True
+    ).rename(
+        columns={'Дата поступления': 'Дата', 'Заказано остаток': 'Количество'}
     )
     data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
     data['Склад'] = 'Поступления'
