@@ -56,6 +56,8 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     data['Количество штук'] = data['Количество штук'].map(in_float)
     data['Документ заказа.Статус'] = data['Документ заказа.Статус'].map(in_float)
 
+
+
     # добавляет колонки 'Закуп подтвержден', 'Возможный заказ' по данным из ПОБЕДЫ
     appr_orders = approved_orders(tuple(data['Номер победы'].unique()))
     data = merge(data, appr_orders, how='left', on='Номер победы', copy=False)
@@ -250,6 +252,7 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
         columns={'Дата поступления': 'Дата', 'Заказано остаток': 'Количество'}
     ).dropna()
     data['Дата'] = data['Дата'].map(lambda x: datetime.strptime(x, '%d.%m.%Y'))
+
     data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
     data['Склад'] = 'Поступления'
     data = data.\
