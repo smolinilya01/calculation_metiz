@@ -54,7 +54,9 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     data['Изделие'] = modify_col(data['Изделие'], instr=1).map(extract_product_name)
     data['Нельзя_заменять'] = 0  # в будущем в выгрузку добавиться колонка о запрете замены
     data['Количество штук'] = data['Количество штук'].map(in_float)
-    data['Документ заказа.Статус'] = data['Количество штук'].map(in_float)
+    data['Документ заказа.Статус'] = data['Документ заказа.Статус'].map(in_float)
+
+
 
     # добавляет колонки 'Закуп подтвержден', 'Возможный заказ' по данным из ПОБЕДЫ
     appr_orders = approved_orders(tuple(data['Номер победы'].unique()))
@@ -223,7 +225,7 @@ def tn_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
 
     if short_term_plan is True:
         data.to_csv(
-            f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_tn {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+            f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\rests_tn {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
             sep=";",
             encoding='ansi',
             index=False
@@ -243,14 +245,14 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     path = r"W:\Analytics\Илья\!outloads\Остатки заказов поставщикам метизы (ANSITXT).txt"
     data = read_csv(
         path,
-        sep=';',
+        sep='\t',
         encoding='ansi',
-        usecols=['Дата поступления', 'Номенклатура', 'Заказано остаток'],
-        parse_dates=['Дата поступления'],
-        dayfirst=True
+        usecols=['Дата поступления', 'Номенклатура', 'Заказано остаток']
     ).rename(
         columns={'Дата поступления': 'Дата', 'Заказано остаток': 'Количество'}
-    )
+    ).dropna()
+    data['Дата'] = data['Дата'].map(lambda x: datetime.strptime(x, '%d.%m.%Y'))
+
     data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
     data['Склад'] = 'Поступления'
     data = data.\
@@ -261,11 +263,18 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     if short_term_plan is True:
         data = data[data['Дата'] <= NOW + timedelta(days=DAYS_AFTER)]  # только поступления в нужном периоде
         data.to_csv(
-            f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_fut_inputs {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
+            f'W:\\Analytics\\Илья\\!deficit_metiz_work_files\\rests_fut_inputs {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
             sep=";",
             encoding='ansi',
             index=False
         )  # запись используемых файлов, для взгляда в прошлое
+
+    data.to_csv(
+        r".\support_data\outloads\rest_futures_inputs.csv",
+        sep=";",
+        encoding='ansi',
+        index=False
+    )  # запись используемых файлов, для взгляда в прошлое
 
     logging.info('Поступления загрузились')
     return data

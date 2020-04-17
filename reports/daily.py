@@ -44,7 +44,10 @@ def deficit(table_: DataFrame) -> None:
     table = table[need_columns]
 
     first_table = main_deficit_table(table)
-    second_table = second_deficit_table(first_table)
+    second_table = second_deficit_table(
+        table_=first_table,
+        status_table=table_.loc[:, ['Номер победы', 'Партия', 'Статус']].drop_duplicates()
+    )
     first_table['Дата запуска ФАКТ'] = first_table['Дата запуска ФАКТ'].replace({'0': None})
 
     first_table.to_csv(
@@ -189,21 +192,36 @@ def compare_with_prev_ask(table: DataFrame) -> DataFrame:
     return data.drop_duplicates()
 
 
-def second_deficit_table(table_: DataFrame) -> DataFrame:
+def second_deficit_table(table_: DataFrame, status_table: DataFrame) -> DataFrame:
     """Создание второй таблицы ежедневного отчета по дефициту
 
     :param table_: таблица из main_deficit_table
+    :param status_table: главная таблица output_req с номерами заказов и статусом
     """
     table = table_.copy()
+    table = table.merge(
+        status_table,
+        left_on=['№ заказа', 'Партия'],
+        right_on=['Номер победы', 'Партия'],
+        how='left'
+    )
     table['Дата запуска ПЛАН'] = table['Дата запуска ПЛАН'].ffill()
     table['Дата запуска ФАКТ'] = table['Дата запуска ФАКТ'].ffill()
+    table['Статус'] = table['Статус'].ffill()
 
+    closed = table[table['Статус'] == 'Закрыт']
     launch = table[table['Дата запуска ФАКТ'] != '0']
     non_launch = table[table['Дата запуска ФАКТ'] == '0']
 
     need_columns = ['Заказчик/Сортамент', 'Остаточная потребность']
+    closed = closed[need_columns][closed['Изделие'].isna()]
     launch = launch[need_columns][launch['Изделие'].isna()]
     non_launch = non_launch[need_columns][non_launch['Изделие'].isna()]
+
+    closed = closed.\
+        groupby(by=['Заказчик/Сортамент']).\
+        sum().\
+        reset_index()
     launch = launch.\
         groupby(by=['Заказчик/Сортамент']).\
         sum().\
@@ -214,16 +232,20 @@ def second_deficit_table(table_: DataFrame) -> DataFrame:
         reset_index()
 
     second_table = DataFrame(data=None, columns=launch.columns)
-    second_table.loc[0] = ['В работе', launch['Остаточная потребность'].sum()]
+
+    second_table.loc[0] = ['Заказ закрыт по про-ву', closed['Остаточная потребность'].sum()]
+    second_table = concat([second_table, closed])
+
+    second_table.loc[len(second_table)] = ['В работе', launch['Остаточная потребность'].sum()]
     second_table = concat([second_table, launch])
 
     second_table.loc[len(second_table)] = ['Не в работе', non_launch['Остаточная потребность'].sum()]
     second_table = concat([second_table, non_launch])
 
-    summary_deficit = second_table['Остаточная потребность'][
-        second_table['Заказчик/Сортамент'].isin(['В работе', 'Не в работе'])
+    sum_deficit = second_table['Остаточная потребность'][
+        second_table['Заказчик/Сортамент'].isin(['Заказ закрыт по про-ву', 'В работе', 'Не в работе'])
     ].sum()
-    second_table.loc[len(second_table)] = ['ИТОГО', summary_deficit]
+    second_table.loc[len(second_table)] = ['ИТОГО', sum_deficit]
 
     second_table.columns = ['Номенклатура металла', 'Потребность']
     second_table['Комментарий МТО'] = None
