@@ -259,13 +259,7 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     data = data.merge(dictionary, on='Номенклатура', how='left')
 
     if short_term_plan is True:
-        data = data[data['Дата'] <= NOW + timedelta(days=DAYS_AFTER)]  # только поступления в нужном периоде
-        data.to_csv(
-            f'W:\\Analytics\\Илья\\!deficit_work_files\\rests_fut_inputs {NOW.strftime("%y%m%d %H_%M_%S")}.csv',
-            sep=";",
-            encoding='ansi',
-            index=False
-        )  # запись используемых файлов, для взгляда в прошлое
+        data = DataFrame(data=None, columns=list(data.columns))  # дневной дефицит без поступлений
 
     logging.info('Поступления загрузились')
     return data
