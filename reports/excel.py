@@ -20,14 +20,14 @@ def daily_excel_reports() -> None:
     daily_report_name = r".\support_data\reports\Дефицит.xlsm"
     macro(daily_report_name)
     destination = (
-        r'\\oemz-fs01.oemz.ru\Works$\1.1. Отчеты по производству\1.1.5 Отчет по дефициту заказов' +
-        f'\\{NOW.strftime("%Y%m%d")}_Дефицит.xlsm'
+        r'\\oemz-fs01.oemz.ru\Works$\1.1. Отчеты по производству\1.1.6 Отчет по дефициту метизов' +
+        f'\\{NOW.strftime("%Y%m%d")}_Дефицит_метизов.xlsm'
     )
-    # try:
-    #     copy(daily_report_name, destination)
-    # except Exception:
-    #     copy(daily_report_name.replace('.xlsm', '_1.xlsm'), destination)
-    #     logging.info(format_exc)
+    try:
+        copy(daily_report_name, destination)
+    except Exception:
+        copy(daily_report_name.replace('.xlsm', '_1.xlsm'), destination)
+        logging.info(format_exc)
 
 
 def macro(path_: str) -> None:
