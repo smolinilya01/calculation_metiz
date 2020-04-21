@@ -56,19 +56,29 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     data['Количество штук'] = data['Количество штук'].map(in_float)
     data['Документ заказа.Статус'] = data['Документ заказа.Статус'].map(in_float)
 
-
-
     # добавляет колонки 'Закуп подтвержден', 'Возможный заказ' по данным из ПОБЕДЫ
     appr_orders = approved_orders(tuple(data['Номер победы'].unique()))
     data = merge(data, appr_orders, how='left', on='Номер победы', copy=False)
+
+    # расчет Дефицита с фильтрами
+    non_complect_orders = non_complect()
+    order_shipments = order_shipment()
+    data = data.\
+        merge(non_complect_orders, how='left', on=['Номер победы', 'Номенклатура']).\
+        merge(order_shipments, how='left', on='Номер победы')
+    data['Некомплектная_отгрузка'] = data['Некомплектная_отгрузка'].fillna(0)
+    data['Полная_отгрузка'] = data['Полная_отгрузка'].fillna(0)
     data['Дефицит'] = (data['Количество в заказе'] - data['Перемещено']).\
         map(lambda x: 0 if x < 0 else x)
-    data['Дефицит'] = data['Дефицит'].where(
-        (data['Заказ обеспечен'] == 0) &
-        (data['Пометка удаления'] == 0) &
-        (data['Закуп подтвержден'] == 1),
-        0
-    )
+    data['Дефицит'] = data['Дефицит'].\
+        where(
+            (data['Заказ обеспечен'] == 0) &
+            (data['Пометка удаления'] == 0) &
+            (data['Закуп подтвержден'] == 1) &
+            (data['Полная_отгрузка'] == 0) &
+            (data['Некомплектная_отгрузка'] == 0),
+            0
+        )
     del data['Обеспечена МП']  # del data['Обеспечена МП'], data['Заказчик'], data['Спецификация']
 
     tn_ord = tn_orders()
@@ -311,3 +321,43 @@ def approved_orders(orders: tuple) -> DataFrame:
     data = data.rename(columns={'number_order': 'Номер победы'})
 
     return data[['Номер победы', 'Закуп подтвержден', 'Возможный заказ']]
+
+
+def non_complect() -> DataFrame:
+    """Загрузка списка заказов с некомплектной отгрузкой
+    Если Некомплектная_отгрузка == 1, то значит эта позиция отгрузилась и в расчете не участвует
+    """
+    path = r'support_data/outloads/non_complect_order.csv'
+    data = read_csv(
+        path,
+        sep=';',
+        encoding='ansi',
+        dtype={'Номер победы': str}
+    )
+
+    return data
+
+
+def order_shipment() -> DataFrame:
+    """Список отгрузок заказов
+    Если Полная_отгрузка == 1, то значит эта позиция отгрузилась и в расчете не участвует
+    """
+    path = r"W:\Analytics\Илья\!outloads\Открузки_заказов (ANSITXT).txt"
+    data = read_csv(
+        path,
+        sep='\t',
+        encoding='ansi',
+        dtype={'Номер победы': str}
+    ).rename(columns={
+        'Заказ пр-ва (Победа)': 'Номер победы',
+        'Заказ (с учетом отмен)': 'Заказано'
+    })
+    data = data[~data['Договор'].isna()]
+    data['Полная_отгрузка'] = 0
+    data['Заказано'] = modify_col(data['Заказано'], instr=1, space=1, comma=1, numeric=1)
+    data['Отгружено'] = modify_col(data['Отгружено'], instr=1, space=1, comma=1, numeric=1)
+    data['Полная_отгрузка'] = data['Полная_отгрузка'].\
+        where(~(data['Отгружено'] >= data['Заказано']), 1)
+    data = data[['Номер победы', 'Полная_отгрузка']].drop_duplicates()
+
+    return data
