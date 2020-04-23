@@ -8,10 +8,11 @@ from common.common import (
 )
 from pandas import (
     DataFrame, read_csv, merge,
-    read_sql_query, concat
+    read_sql_query, concat, read_excel
 )
 from datetime import datetime, timedelta
 from pypyodbc import connect
+from os import os_path
 
 
 NOW: datetime = datetime.now()
@@ -20,7 +21,7 @@ PATH_REP_MARK = r'.\support_data\outloads\dict_replacement_marka.csv'
 PATH_REP_GOST = r'.\support_data\outloads\dict_replacement_gost.csv'
 PATH_REP_POKR = r'.\support_data\outloads\dict_replacement_pokrit.csv'
 PATH_REP_PROCHN = r'.\support_data\outloads\dict_replacement_prochn.csv'
-PATH_LON_SORT = r'support_data/outloads/long_term_sortaments.csv'
+PATH_LON_SORT = r'.\support_data/outloads/long_term_sortaments.csv'
 
 
 def requirements(short_term_plan: bool = False) -> DataFrame:
@@ -359,5 +360,40 @@ def order_shipment() -> DataFrame:
     data['Полная_отгрузка'] = data['Полная_отгрузка'].\
         where(~(data['Отгружено'] >= data['Заказано']), 1)
     data = data[['Номер победы', 'Полная_отгрузка']].drop_duplicates()
+
+    return data
+
+
+def load_processed_deficit() -> DataFrame:
+    """Загрузка рассчитанного дефицита из файла эксель"""
+    path = r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
+    data = read_excel(
+        path,
+        sheet_name='График с поступленими',
+        header=1,
+        usecols=[0, 1]
+    )
+    data = data.\
+        dropna().\
+        rename(columns={'Дата запуска': 'Номенклатура', 'ИТОГО': 'Дефицит'})
+
+    return data
+
+
+def load_orders_to_supplier() -> DataFrame:
+    """Загрузка данных о новых заказах поставщику"""
+    path_for_date = r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
+    date = datetime.fromtimestamp(os_path.getmtime(path_for_date))
+
+    path = r"sfdsdf"
+    data = read_csv(
+        path,
+        sep='\t',
+        encoding='ansi'
+    )
+    data = data[data['Дата документа'] >= date]
+    # НЕОБХОДИМО СКОРРЕКТИРОВАТЬ
+    # Нужно сгруппировать по номенклатурам если нужно число, то добавить сегодняшнее
+    # количество в заказе должно быть в колонке Количество
 
     return data
