@@ -386,13 +386,20 @@ def load_orders_to_supplier() -> DataFrame:
     path_for_date = r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
     date = datetime.fromtimestamp(os_path.getmtime(path_for_date))
 
-    path = r"W:\Analytics\Илья\!outloads\!111.txt"
+    path = r"W:\Analytics\Илья\!outloads\Анализ_заказов_поставщикам_метизы (ANSITXT).txt"
     data = read_csv(
         path,
         sep='\t',
-        encoding='ansi',
-        parse_dates=['Дата']
+        encoding='ansi'
+    ).rename(
+        columns={'Заказ поставщику.Дата': 'Дата', 'Поступило': 'Доставлено'}
     )
+    data = data[~data['Номенклатура'].isna()]
+
+    data['Заказано'] = modify_col(data['Заказано'], instr=1, space=1, comma=1, numeric=1)
+    data['Доставлено'] = modify_col(data['Доставлено'], instr=1, space=1, comma=1, numeric=1)
+    data['Заказано остаток'] = modify_col(data['Заказано остаток'], instr=1, space=1, comma=1, numeric=1)
+    data['Дата'] = data['Дата'].map(lambda x: datetime.strptime(x, "%d.%m.%Y %H:%M:%S"))
     data = data[data['Дата'] >= date].\
         groupby(by=['Номенклатура'])\
         [['Заказано', 'Доставлено']].\

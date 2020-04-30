@@ -47,17 +47,17 @@ def building_purchase_analysis(
             repl_=repl_
         )
         copy_orders = copy_orders.dropna()
-    
+
     copy_orders['Дефицит'] = 0
     copy_orders = copy_orders[[
         'Номенклатура', 'Дефицит', 'Заказано', 'Доставлено'
     ]]
     data = concat([data, copy_orders], axis=0)
-    data['Еще_заказать'] = data['Дефицит'] - data['Заказано']
     data = data.\
         fillna(0).\
         sort_values(by='Номенклатура')
 
+    data['Еще_заказать'] = data['Дефицит'] - data['Заказано']
     data.to_excel(
         r".\support_data\purchase_analysis\purchase_analysis.xlsx",
         index=False
