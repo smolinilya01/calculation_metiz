@@ -8,10 +8,11 @@ from common.common import (
 )
 from pandas import (
     DataFrame, read_csv, merge,
-    read_sql_query, concat
+    read_sql_query, concat, read_excel
 )
 from datetime import datetime, timedelta
 from pypyodbc import connect
+from os import path as os_path
 
 
 NOW: datetime = datetime.now()
@@ -20,7 +21,7 @@ PATH_REP_MARK = r'.\support_data\outloads\dict_replacement_marka.csv'
 PATH_REP_GOST = r'.\support_data\outloads\dict_replacement_gost.csv'
 PATH_REP_POKR = r'.\support_data\outloads\dict_replacement_pokrit.csv'
 PATH_REP_PROCHN = r'.\support_data\outloads\dict_replacement_prochn.csv'
-PATH_LON_SORT = r'support_data/outloads/long_term_sortaments.csv'
+PATH_LON_SORT = r'.\support_data\outloads\long_term_sortaments.csv'
 
 
 def requirements(short_term_plan: bool = False) -> DataFrame:
@@ -99,7 +100,8 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
 
 
 def nomenclature() -> DataFrame:
-    """Загузка таблицы со структурными данными для замен."""
+    """Загузка таблицы со структурными данными для замен.
+    А так же создание справочников по покрытию и прочности"""
     path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\Справочник_метизов_лэп (ANSITXT).txt"
     data = read_csv(
         path,
@@ -199,7 +201,7 @@ def center_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     data = data[data['Количество'] > 0]
     data['Склад'] = 'Центральный склад'  # Склады центральные по металлу, метизам и вход контроля
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
-    data = data.merge(dictionary, on='Номенклатура', how='left')
+    data = data.merge(dictionary, on='Номенклатура', how='left').fillna('')
 
     if short_term_plan is True:
         data.to_csv(
@@ -231,7 +233,7 @@ def tn_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
     data['Склад'] = 'ТН'
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
-    data = data.merge(dictionary, on='Номенклатура', how='left')
+    data = data.merge(dictionary, on='Номенклатура', how='left').fillna('')
 
     if short_term_plan is True:
         data.to_csv(
@@ -268,7 +270,7 @@ def future_inputs(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     data = data.\
         fillna(0).\
         sort_values(by='Дата')
-    data = data.merge(dictionary, on='Номенклатура', how='left')
+    data = data.merge(dictionary, on='Номенклатура', how='left').fillna('')
 
     if short_term_plan is True:
         data = DataFrame(data=None, columns=list(data.columns))  # дневной дефицит без поступлений
@@ -359,5 +361,42 @@ def order_shipment() -> DataFrame:
     data['Полная_отгрузка'] = data['Полная_отгрузка'].\
         where(~(data['Отгружено'] >= data['Заказано']), 1)
     data = data[['Номер победы', 'Полная_отгрузка']].drop_duplicates()
+
+    return data
+
+
+def load_processed_deficit() -> DataFrame:
+    """Загрузка рассчитанного дефицита из файла эксель"""
+    path = r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
+    data = read_excel(
+        path,
+        sheet_name='График с поступленими',
+        header=1,
+        usecols=[0, 1]
+    )
+    data = data.\
+        dropna().\
+        rename(columns={'Дата запуска': 'Номенклатура', 'ИТОГО': 'Дефицит'})
+
+    return data
+
+
+def load_orders_to_supplier() -> DataFrame:
+    """Загрузка данных о новых заказах поставщику"""
+    path_for_date = r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
+    date = datetime.fromtimestamp(os_path.getmtime(path_for_date))
+
+    path = r"W:\Analytics\Илья\!outloads\!111.txt"
+    data = read_csv(
+        path,
+        sep='\t',
+        encoding='ansi',
+        parse_dates=['Дата']
+    )
+    data = data[data['Дата'] >= date].\
+        groupby(by=['Номенклатура'])\
+        [['Заказано', 'Доставлено']].\
+        sum()
+    data = data.reset_index()
 
     return data
