@@ -2,19 +2,19 @@
 Поиск идентичной или аналогичной номенклатуры.
 Алогритм как write_off"""
 
-from pandas import (DataFrame, Series)
+from pandas import (DataFrame, Series, concat)
 
 
-def write_off(
+def building_purchase_analysis(
     table: DataFrame,
     orders: DataFrame,
     nom_: DataFrame,
     repl_: dict
-) -> (DataFrame, DataFrame, DataFrame, DataFrame, list):
+) -> None:
     """Процесс списания остатков и создания файлов csv
 
     :param table: таблица потребностей из итогового отчета
-    :param orders: остатки ТН
+    :param orders: данные о закупках менеджеров
     :param nom_: справочник номенклатуры
     :param repl_: словарь со справочниками замен {
             'mark': dict_repl_mark,
@@ -29,11 +29,11 @@ def write_off(
         merge(orders, on='Номенклатура', how='left')
 
     # потом только в несмерженных данных производим поиск
-    index_rests_nom = data[~data['Номенклатура'].
-        isin(set(data['Номенклатура']) - set(orders['Номенклатура']))].\
+    index_rests_nom = data[
+        data['Номенклатура'].isin(set(data['Номенклатура']) - set(orders['Номенклатура']))].\
         index
-    copy_orders = orders[~orders['Номенклатура'].
-        isin(set(orders['Номенклатура']) - set(data['Номенклатура']))].\
+    copy_orders = orders[
+        orders['Номенклатура'].isin(set(orders['Номенклатура']) - set(data['Номенклатура']))].\
         copy()
 
     for i in index_rests_nom:
@@ -47,8 +47,21 @@ def write_off(
             repl_=repl_
         )
         copy_orders = copy_orders.dropna()
+    
+    copy_orders['Дефицит'] = 0
+    copy_orders = copy_orders[[
+        'Номенклатура', 'Дефицит', 'Заказано', 'Доставлено'
+    ]]
+    data = concat([data, copy_orders], axis=0)
+    data['Еще_заказать'] = data['Дефицит'] - data['Заказано']
+    data = data.\
+        fillna(0).\
+        sort_values(by='Номенклатура')
 
-    return data
+    data.to_excel(
+        r".\support_data\purchase_analysis\purchase_analysis.xlsx",
+        index=False
+    )
 
 
 def replacement(
@@ -85,8 +98,12 @@ def replacement(
     if len(need_replacements) == 0:
         return None
     else:
-        table.at[ind, 'Количество'] = need_replacements['Количество'].sum()
-        sklad['Количество'] = sklad['Количество'].\
+        table.at[ind, 'Заказано'] = need_replacements['Заказано'].sum()
+        sklad['Заказано'] = sklad['Заказано'].\
+            where(~sklad['Номенклатура'].isin(need_replacements['Номенклатура']), None)
+
+        table.at[ind, 'Доставлено'] = need_replacements['Доставлено'].sum()
+        sklad['Доставлено'] = sklad['Доставлено'].\
             where(~sklad['Номенклатура'].isin(need_replacements['Номенклатура']), None)
 
 
@@ -110,7 +127,6 @@ def search_replacements(
         }
     """
     sklad_ = sklad\
-        [sklad['Количество'] > 0]\
         [sklad['Номенклатура'].str.startswith(cur_nom.split()[0])].\
         copy()
     sklad_ = sklad_.merge(dict_nom, how='left', on='Номенклатура')

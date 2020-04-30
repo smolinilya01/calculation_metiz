@@ -9,7 +9,7 @@ from etl.extract import (
     PATH_REP_MARK, PATH_REP_GOST,
     PATH_REP_POKR, PATH_REP_PROCHN
 )
-from algo.search import write_off
+from algo.search import building_purchase_analysis
 
 
 def main() -> None:
@@ -23,7 +23,7 @@ def main() -> None:
     dict_repl_pokr = replacements(PATH_REP_POKR)
     dict_repl_prochn = replacements(PATH_REP_PROCHN)
 
-    processed_deficit = write_off(
+    building_purchase_analysis(
         table=processed_deficit,
         orders=orders,
         nom_=dict_nom,
@@ -34,9 +34,6 @@ def main() -> None:
             'prochn': dict_repl_prochn
         }
     )
-    # processed_deficit.to_csv(
-    #     r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
-    # )
 
 
 if __name__ == '__main__':
