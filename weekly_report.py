@@ -15,13 +15,18 @@ from etl.extract import (
 from common.common import check_calculation_right
 from reports.weekly import weekly_tables
 from reports.excel import weekly_excel_reports
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
-def main() -> None:
+def main(shift_days: int = None) -> None:
     """Выполнение расчетов"""
-    separate_date = input('Введите дату окончания краскосрочного периода,\nВ формате ДД.ММ.ГГГГ:\n')
-    separate_date = datetime.strptime(separate_date, '%d.%m.%Y')
+    # shift_days используется для расчета в анализе закупа, если установить shift_days,
+    # то посчитает потребность на shift_days дней вперед
+    if shift_days is None:
+        separate_date = input('Введите дату окончания краскосрочного периода,\nВ формате ДД.ММ.ГГГГ:\n')
+        separate_date = datetime.strptime(separate_date, '%d.%m.%Y')
+    else:
+        separate_date = datetime.now() + timedelta(days=shift_days)
 
     operations = list()
     dict_nom = nomenclature()
