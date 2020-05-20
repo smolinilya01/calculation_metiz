@@ -2,65 +2,152 @@
 Поиск идентичной или аналогичной номенклатуры.
 Алогритм как write_off"""
 
-from pandas import (DataFrame, Series, concat)
+from algo.write_off import write_off
+from etl.extract import (
+    replacements, load_orders_to_supplier, nomenclature
+)
+from etl.extract import (
+    PATH_REP_MARK, PATH_REP_GOST,
+    PATH_REP_POKR, PATH_REP_PROCHN
+)
+from common.common import check_calculation_right
+from datetime import datetime
+from reports.weekly import weekly_tables
+from reports.excel import weekly_excel_reports
+from pandas import (DataFrame, concat, read_csv, read_excel)
+from etl.extract import NOW
 
 
-def building_purchase_analysis(
-    table: DataFrame,
-    orders: DataFrame,
-    nom_: DataFrame,
-    repl_: dict
-) -> DataFrame:
-    """Поиск
+def building_purchase_analysis() -> DataFrame:
+    """Повторение алгоритма расчета потребности на файле из прошлого"""
+    sep_date = separate_date()
 
-    :param table: таблица потребностей из итогового отчета
-    :param orders: данные о закупках менеджеров
-    :param nom_: справочник номенклатуры
-    :param repl_: словарь со справочниками замен {
+    operations = list()
+    dict_nom = nomenclature()
+    dict_repl_mark = replacements(PATH_REP_MARK)
+    dict_repl_gost = replacements(PATH_REP_GOST)
+    dict_repl_pokr = replacements(PATH_REP_POKR)
+    dict_repl_prochn = replacements(PATH_REP_PROCHN)
+
+    start_rest_center = void_rests(dict_nom=dict_nom)
+    start_rest_tn = void_rests(dict_nom=dict_nom)
+
+    start_fut = modify_orders_to_supplier(table=load_orders_to_supplier(), dict_nom=dict_nom)
+    start_ask = old_requirements()
+
+    end_rest_center = start_rest_center.copy()
+    end_rest_tn = start_rest_tn.copy()
+    end_fut = start_fut.copy()
+    end_ask = start_ask.copy()
+
+    # списание остатков на потребности
+    end_ask, end_rest_tn, end_rest_center, end_fut, operations = write_off(
+        table=end_ask,
+        rest_tn=end_rest_tn,
+        rest_c=end_rest_center,
+        fut=end_fut,
+        oper_=operations,
+        nom_=dict_nom,
+        repl_={
             'mark': dict_repl_mark,
             'gost': dict_repl_gost,
             'pokr': dict_repl_pokr,
             'prochn': dict_repl_prochn
         }
-    """
-    # сначала мержим и делаем тем самым поиск идентичной номенклатуры
-    data = table.\
-        copy().\
-        merge(orders, on='Номенклатура', how='left'). \
-        fillna(0)
+    )
 
-    # потом только в несмерженных данных производим поиск
-    # index_rests_nom = data[
-    #     data['Номенклатура'].isin(set(data['Номенклатура']) - set(orders['Номенклатура']))].\
-    #     index
-    copy_orders = orders[
-        orders['Номенклатура'].isin(set(orders['Номенклатура']) - set(data['Номенклатура']))].\
-        copy()
+    check_calculation_right(
+        start_ask_=start_ask,
+        end_ask_=end_ask,
+        start_c_=start_rest_center,
+        end_c_=end_rest_center,
+        start_tn_=start_rest_tn,
+        end_tn_=end_rest_tn,
+        start_fut_=start_fut,
+        end_fut_=end_fut,
+    )
 
-    for i in data.index:
-        if len(copy_orders) == 0:
-            break
-        replacement(
-            ind=i,
-            sklad=copy_orders,
-            table=data,
-            nom_=nom_,
-            repl_=repl_
-        )
-        copy_orders = copy_orders.dropna()
-    
-    copy_orders['Дефицит'] = 0
-    copy_orders = copy_orders[[
-        'Номенклатура', 'Дефицит', 'Заказано', 'Доставлено'
-    ]]
-    data = concat([data, copy_orders], axis=0)
-    data = data.fillna(0)
-    data['Еще_заказать'] = data['Дефицит'] - data['Заказано']
-    data['Еще_заказать'] = data['Еще_заказать'].\
-        where(data['Еще_заказать'] > 0, 0)
+    weekly_tables(
+        start_ask_=start_ask,
+        end_ask_=end_ask,
+        oper_=operations,
+        sep_date=sep_date
+    )
+    weekly_excel_reports()
+
+    # построение таблицы-----------------------------------------------
+    name_oper = r'.\support_data\output_tables\oper_{0}.csv'.format(NOW.strftime('%Y%m%d'))
+    data = read_csv(
+        name_oper,
+        sep=";",
+        encoding='ansi',
+        usecols=[0, 3, 7, 10],
+        parse_dates=['Дата потребности']
+    )
+    data = data[data['Дата потребности'] <= sep_date]\
+        [['Номенклатура потребности', 'Номенклатура Списания', 'Списание потребности']]
     data = data.\
-        fillna(0).\
-        sort_values(by='Номенклатура')
+        groupby(by=['Номенклатура потребности', 'Номенклатура Списания']).\
+        sum().\
+        reset_index().\
+        rename(columns={'Номенклатура потребности': 'Номенклатура',
+                        'Номенклатура Списания': 'Номенклатура_заказа',
+                        "Списание потребности": 'План_закупа'})
+    data['Заказано'] = data['План_закупа']
+    data = data[['Номенклатура', 'План_закупа', 'Номенклатура_заказа', 'Заказано']]
+
+    additional_plan = end_ask.copy()  # план закупа, который остался без заказов поставщикам
+    additional_plan = additional_plan[additional_plan['Дата запуска'] <= sep_date]\
+        [['Номенклатура', 'Дефицит']].\
+        groupby(by=['Номенклатура']).\
+        sum().\
+        reset_index().\
+        rename(columns={'Дефицит': 'План_закупа'})
+    additional_plan['Номенклатура_заказа'] = None
+    additional_plan['Заказано'] = 0
+    additional_plan = additional_plan[['Номенклатура', 'План_закупа', 'Номенклатура_заказа', 'Заказано']]
+    additional_plan = additional_plan[additional_plan['План_закупа'] > 0]
+
+    data = concat((data, additional_plan))
+
+    additional_futures = end_fut.copy()
+    additional_futures = additional_futures[additional_futures['Количество'] > 0].\
+        groupby(by=['Номенклатура'])\
+        ['Количество'].\
+        sum().\
+        reset_index().\
+        rename(columns={'Номенклатура': 'Номенклатура_заказа',
+                        'Количество': 'Заказано'})
+    additional_futures['Номенклатура'] = None
+    additional_futures['План_закупа'] = 0
+    additional_futures = additional_futures[
+        ['Номенклатура', 'План_закупа', 'Номенклатура_заказа', 'Заказано']
+    ]
+
+    data = concat((data, additional_futures))
+
+    # добавление Поступило и остаточная потребность-------------------------------------
+    inputs = load_orders_to_supplier()
+    inputs = inputs[['Номенклатура', 'Заказано', 'Доставлено']].\
+        rename(columns={'Номенклатура': 'Номенклатура_заказа',
+                        'Заказано': 'Заказано_всего'}).\
+        fillna(0)
+    data = data.\
+        merge(inputs, on='Номенклатура_заказа', how='left').\
+        fillna(0)
+    data['Процент_заказа'] = data['Заказано'] / data['Заказано_всего']
+    data['Доставлено'] = data['Доставлено'] * data['Процент_заказа']
+
+    data['Еще_заказать'] = data['План_закупа'] - data['Заказано']
+    data['Еще_заказать'] = data['Еще_заказать']. \
+        where(data['Еще_заказать'] > 0, 0)
+    data = data. \
+        sort_values(by=['Номенклатура', 'Номенклатура_заказа'])
+
+    data = data[[
+        'Номенклатура', 'План_закупа', 'Номенклатура_заказа',
+        'Заказано', 'Доставлено', 'Еще_заказать'
+    ]].fillna(0)
 
     data.\
         rename(columns={'Дефицит': 'План_закупа', 'Еще_заказать': 'Остаточная_потребность'}).\
@@ -72,150 +159,68 @@ def building_purchase_analysis(
     return data
 
 
-def replacement(
-    ind: int,
-    sklad: DataFrame,
-    table: DataFrame,
-    nom_: DataFrame,
-    repl_: dict
-) -> None:
-    """Поиск аналогичной номенклатуры для анализа закупа менеджеров
-
-    :param ind: индекс строчки в таблице потребностей
-    :param sklad: данные о закупках менеджеров
-    :param table: таблица потребностей
-    :param nom_: справочник номенклатуры
-    :param repl_: словарь со справочниками замен {
-            'mark': dict_repl_mark,
-            'gost': dict_repl_gost,
-            'pokr': dict_repl_pokr,
-            'prochn': dict_repl_prochn
-        }
-    """
-    cur_nom = table.at[ind, 'Номенклатура']
-    if len(nom_[nom_['Номенклатура'] == cur_nom]) == 0:
-        return None  # быстрый выход из списания, если cur_nom нет в справочнике номенклатур
-
-    # определение опурядоченного списка замен
-    need_replacements = search_replacements(
-        cur_nom=cur_nom,
-        sklad=sklad,
-        dict_nom=nom_,
-        dict_repl=repl_
+def separate_date() -> datetime:
+    """Возвращает дату краткосрочного закупа"""
+    SEPARATE_DATE_PATH = r".\support_data\purchase_analysis\Итоговая_потребность.xlsm"
+    data = read_excel(
+        SEPARATE_DATE_PATH,
+        sheet_name='Списания',
+        header=0,
+        usecols=[0],
+        parse_dates=['Дата запуска']
     )
-    if len(need_replacements) == 0:
-        return None
-    else:
-        table.at[ind, 'Заказано'] += need_replacements['Заказано'].sum()
-        sklad['Заказано'] = sklad['Заказано'].\
-            where(~sklad['Номенклатура'].isin(need_replacements['Номенклатура']), None)
+    sep_date = data['Дата запуска'].max()
 
-        table.at[ind, 'Доставлено'] += need_replacements['Доставлено'].sum()
-        sklad['Доставлено'] = sklad['Доставлено'].\
-            where(~sklad['Номенклатура'].isin(need_replacements['Номенклатура']), None)
+    return sep_date
 
 
-def search_replacements(
-    cur_nom: str,
-    sklad: DataFrame,
-    dict_nom: DataFrame,
-    dict_repl: dict
-) -> DataFrame:
-    """Поиск взаимозамен по нескольким параметрам из словарь со справочниками замен
+def old_requirements() -> DataFrame:
+    """Подгружает потребности из файла ask.csv"""
+    data = read_csv(
+        r".\support_data\purchase_analysis\ask.csv",
+        sep=";",
+        encoding='ansi',
+        parse_dates=['Дата запуска']
+    )
+    data['Количество в заказе'] = data['Остаток дефицита']
+    data['Перемещено'] = 0
+    data['Дефицит'] = data['Остаток дефицита']
 
-    :param cur_nom: текущая номенклатура
-    :param sklad: заказы поставщикам
+    del data['Остаток дефицита'], data['Списание из Цент склада'], \
+        data['Списание из ТН'], data['Списание из Поступлений']
+
+    data = data[(data['Дефицит'] > 0) & (data['Дата запуска'] <= separate_date())]
+
+    return data
+
+
+def void_rests(dict_nom: DataFrame) -> DataFrame:
+    """Возвращает пустые остатки, нужно, что бы основной алгоритм работал
+
     :param dict_nom: справочник номенклатур
-    :param dict_repl:
-    :return: словарь со справочниками замен {
-            'mark': dict_repl_mark,
-            'gost': dict_repl_gost,
-            'pokr': dict_repl_pokr,
-            'prochn': dict_repl_prochn
-        }
     """
-    sklad_ = sklad\
-        [sklad['Номенклатура'].str.startswith(cur_nom.split()[0])].\
-        copy()
-    sklad_ = sklad_.merge(dict_nom, how='left', on='Номенклатура')
+    columns = ["Дата", "Номенклатура", "Количество", "Склад"]
+    data = DataFrame(data=None, columns=columns)
+    data = data.merge(dict_nom, on='Номенклатура', how='left')
 
-    # поиск возможных замен среди атрибутов (гост, покрытие, марка, прочность)
-    # для приоритезации внутри найденных элементов замен используется индекс, он уже в прав порядке
+    return data
 
-    # cur_mark
-    cur_mark = dict_nom.at[cur_nom, 'Марка_стали']
-    try:  # если не нашел такубю марку-категорию, то ищет cur_mark
-        repl_marks = dict_repl['mark'].loc[:, cur_mark]
-        repl_marks = repl_marks[~repl_marks.isna()]
-    except KeyError:
-        repl_marks = Series(data=cur_mark)
 
-    # cur_gost
-    cur_gost = dict_nom.at[cur_nom, 'Гост']
-    try:  # если не нашел такой гост, то ищет cur_gost
-        repl_gosts = dict_repl['gost'].loc[:, cur_gost]
-        repl_gosts = repl_gosts[~repl_gosts.isna()]
-    except KeyError:
-        repl_gosts = Series(data=cur_gost)
+def modify_orders_to_supplier(table: DataFrame, dict_nom: DataFrame) -> DataFrame:
+    """Модифицирует закупки в список futures
 
-    # cur_pokr
-    cur_pokr = dict_nom.at[cur_nom, 'Покрытие']
-    if cur_pokr == '':
-        repl_pokrs = Series(data=cur_pokr)
-    else:
-        i_cur_pokr = dict_repl['pokr'][dict_repl['pokr']['Покрытие'] == cur_pokr].index[0]
-        repl_pokrs = dict_repl['pokr'].iloc[i_cur_pokr:, 0]
+    :param table: таблица из load_orders_to_supplier()
+    :param dict_nom: справочник номенклатур
+    """
+    data = table.copy()
+    data = data[['Номенклатура', 'Заказано']].\
+        rename(columns={'Заказано': "Количество"})
+    data['Дата'] = datetime.now()
+    data['Склад'] = 'Поступления'
 
-    # cur_prochn
-    cur_prochn = dict_nom.at[cur_nom, 'Класс_прочности']
-    if cur_prochn == '':
-        repl_prochns = Series(data=cur_prochn)
-    else:
-        i_cur_prochn = dict_repl['prochn'][dict_repl['prochn']['Класс_прочности'] == cur_prochn].index[0]
-        repl_prochns = dict_repl['prochn'].iloc[i_cur_prochn:, 0]
+    data = data.\
+        fillna(0).\
+        sort_values(by='Дата')
+    data = data.merge(dict_nom, on='Номенклатура', how='left')
 
-    # созданеи паттерна поиска, которые не содержит атрибуты (гост, марка, прочность, покрытие)
-    pattern = cur_nom
-    if cur_mark != '':  # если в списке номенклатур марка = пустое значение
-        pattern = pattern.replace(str(cur_mark), '.+')
-    if cur_gost != '':
-        pattern = pattern.replace(str(cur_gost), '.+')
-    if cur_pokr != '':
-        pattern = pattern.replace(str(cur_pokr), '.+')
-    if cur_prochn != '':
-        pattern = pattern.replace(str(cur_prochn), '.+')
-
-    sklad_ = sklad_[
-        sklad_['Номенклатура'].str.contains(pattern, regex=True) &
-        sklad_['Марка_стали'].isin(repl_marks) &
-        sklad_['Гост'].isin(repl_gosts) &
-        sklad_['Покрытие'].isin(repl_pokrs) &
-        sklad_['Класс_прочности'].isin(repl_prochns)
-    ]
-
-    # правильная сортировка order = порядок
-    # только если длина найденных номенклатур больше 1
-    if len(sklad_) > 1:
-        order_mark = DataFrame(data=repl_marks.values, columns=['Марка_стали'])
-        order_mark['order_mark'] = order_mark.index
-
-        order_gost = DataFrame(data=repl_gosts.values, columns=['Гост'])
-        order_gost['order_gost'] = order_gost.index
-
-        order_pokr = DataFrame(data=repl_pokrs.values, columns=['Покрытие'])
-        order_pokr['order_pokr'] = order_pokr.index
-
-        order_prochn = DataFrame(data=repl_prochns.values, columns=['Класс_прочности'])
-        order_prochn['order_prochn'] = order_prochn.index
-
-        INDEX = sklad_.index
-        sklad_ = sklad_.\
-            merge(order_mark, on='Марка_стали', how='left').\
-            merge(order_gost, on='Гост', how='left').\
-            merge(order_pokr, on='Покрытие', how='left').\
-            merge(order_prochn, on='Класс_прочности', how='left')
-        sklad_.index = INDEX  # после мержа восстанавливаем индекс
-        sklad_ = sklad_.sort_values(by=[
-            'order_gost', 'order_pokr', 'order_prochn', 'order_mark'
-        ])
-    return sklad_
+    return data
