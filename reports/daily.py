@@ -40,7 +40,11 @@ def deficit(table_: DataFrame) -> None:
     table: DataFrame = table_.copy()
     # table['Остаток дефицита'] = table['Остаток дефицита'] + table['Списание из Поступлений']
     table['Заказчик'] = table['Заказчик'].replace({0: 'Омский ЭМЗ', '0': 'Омский ЭМЗ'})
-    table = table[(table['Заказ обеспечен'] == 0) & (table['Пометка удаления'] == 0)]
+    table = table[
+        (table['Заказ обеспечен'] == 0) &
+        (table['Пометка удаления'] == 0) &
+        (table['Закуп подтвержден'] == 1)
+        ]
     table = table[need_columns]
 
     first_table = main_deficit_table(table)
