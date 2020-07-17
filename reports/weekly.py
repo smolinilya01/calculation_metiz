@@ -1,7 +1,7 @@
 """Weekly reports"""
 
 from common.common import extract_day
-from etl.extract import (NOW, PATH_LON_SORT, replacements)
+from etl.extract import (NOW, PATH_LON_SORT, replacements, nomenclature)
 from pandas import (
     DataFrame, pivot_table, Series, concat
 )
@@ -210,6 +210,13 @@ def graph(table_: DataFrame, method: str) -> None:
         (need_table['Пометка удаления'] == 0)
         ].copy()
     # для схлопывания указанных гостов
+    old_nomenclature = clean_for_graf[['Номенклатура', 'Код']].copy()
+    old_nomenclature['Номенклатура_с_заменами_гостов'] = clean_for_graf['Номенклатура'].map(
+        lambda x: (x.
+                   replace('ГОСТ 7798-70', 'ГОСТ Р ИСО 4014-2013').
+                   replace('ГОСТ Р ИСО 4017-2013', 'ГОСТ Р ИСО 4014-2013').
+                   replace('ГОСТ 5915-70', 'ГОСТ ISO 4032-2014'))
+    )
     clean_for_graf['Номенклатура'] = clean_for_graf['Номенклатура'].map(
         lambda x: (x.
                    replace('ГОСТ 7798-70', 'ГОСТ Р ИСО 4014-2013').
@@ -239,7 +246,29 @@ def graph(table_: DataFrame, method: str) -> None:
     combin_graph.columns = [columns, combin_graph.columns]
 
     filter1 = combin_graph.sum(axis=1).replace({0: None}).notna()
-    
+
+    # добавление коэффициентов, что бы потом посчитать в единицах отчета через ексель
+    nom_data = nomenclature()
+    old_nomenclature = old_nomenclature.merge(
+        nom_data[['Номенклатура', 'coeff', 'Единица отчета']],
+        left_on='Номенклатура',
+        right_on='Номенклатура',
+        how='left',
+        copy=False
+        )
+    del old_nomenclature['Номенклатура'], old_nomenclature['Код']
+    old_nomenclature = old_nomenclature.drop_duplicates().\
+        set_index('Номенклатура_с_заменами_гостов')
+    old_nomenclature.columns = [range(len(old_nomenclature.columns)), old_nomenclature.columns]
+
+    combin_graph = combin_graph.merge(
+        old_nomenclature,
+        left_index=True,
+        right_index=True,
+        how='left',
+        copy=False
+        )
+
     combin_graph[filter1].to_csv(name_combin_graph, sep=";", encoding='ansi')
     combin_graph[filter1].to_csv(name_combin_graph_excel, sep=";", encoding='ansi')
 
