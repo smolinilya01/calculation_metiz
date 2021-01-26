@@ -70,12 +70,18 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
         merge(order_shipments, how='left', on='Номер победы')
     data['Некомплектная_отгрузка'] = data['Некомплектная_отгрузка'].fillna(0)
     data['Полная_отгрузка'] = data['Полная_отгрузка'].fillna(0)
+    data['Закуп подтвержден'] = data['Закуп подтвержден'].where(
+        ~((data['Номенклатура'].str.contains(r'5.6', regex=True)) &
+          (data['Заказчик'] == 'СУРГУТНЕФТЕГАЗ ПАО')), 0
+    )
     data['Дефицит'] = (data['Количество в заказе'] - data['Перемещено']).\
         map(lambda x: 0 if x < 0 else x)
     data['Дефицит'] = data['Дефицит'].\
         where(
-            ((data['Заказ обеспечен'] == 0) & (data['Пометка удаления'] == 0) &
-             (data['Закуп подтвержден'] == 1) & (data['Документ заказа.Статус'] != "Закрыт") &
+            ((data['Заказ обеспечен'] == 0) &
+             (data['Пометка удаления'] == 0) &
+             (data['Закуп подтвержден'] == 1) &
+             (data['Документ заказа.Статус'] != "Закрыт") &
              (data['Полная_отгрузка'] == 0) &
              (data['Изделие.Вид номенклатуры'] != 'Металл под оцинковку')),
             0
@@ -91,6 +97,11 @@ def requirements(short_term_plan: bool = False) -> DataFrame:
     if short_term_plan is True:  # для краткосрочного планирования
         data = multiple_sort(data)  # сортировка потребности и определение
     else:
+        # ТОЛЬКО ДЛЯ МЕТИЗОВ
+        # если номенклатура с ГЦ, то дату запуска делаем сегодняшней, все остальное + 1 день
+        data['Дата запуска'] = data['Дата запуска']\
+            .map(lambda x: x + timedelta(days=1) if x > NOW else NOW + timedelta(days=1))\
+            .where(~data['Номенклатура'].str.contains(r'ГЦ|Гц', regex=True), NOW)
         data = data.sort_values(by='Дата запуска')  # сортировка потребности и определение
 
     data = data.reset_index().rename(columns={
@@ -195,13 +206,13 @@ def center_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
     :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
-    path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metizi (ANSITXT).txt"
+    path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!all_center_free (ANSITXT).txt"
     data = read_csv(
         path,
         sep='\t',
         encoding='ansi'
     )
-    data = data.rename(columns={'Артикул': 'Код'})
+    data = data.rename(columns={'Доступно': "Количество", 'Артикул': 'Код'})
     data = data[~data['Номенклатура'].isna()]
     data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
     data = data[data['Количество'] > 0]
@@ -228,15 +239,16 @@ def tn_rests(dictionary: DataFrame, short_term_plan=False) -> DataFrame:
     :param dictionary: таблица из nomenclature() - справочник номенклатуры
     :param short_term_plan: если True, то запись остаток в папку для сохранения прошлых расчетов
     """
-    path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metal_tn (ANSITXT).txt"
+    path = r"\\oemz-fs01.oemz.ru\Works$\Analytics\Илья\!outloads\!metal_tn_free (ANSITXT).txt"
     data = read_csv(
         path,
         sep='\t',
         encoding='ansi',
     )
-    data = data.rename(columns={'Конечный остаток': "Количество", 'Артикул': 'Код'})
+    data = data.rename(columns={'Доступно': "Количество", 'Артикул': 'Код'})
     data = data[~data['Номенклатура'].isna()]
-    data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1)
+    data['Количество'] = data['Количество'].fillna(0)
+    data['Количество'] = modify_col(data['Количество'], instr=1, space=1, comma=1, numeric=1, minus=1)
     data['Склад'] = 'ТН'
     data['Дата'] = datetime(NOW.year, NOW.month, NOW.day)
     data = data.merge(dictionary, on='Номенклатура', how='left').fillna('')
@@ -310,6 +322,8 @@ def approved_orders(orders: tuple) -> DataFrame:
 
     :param orders: список уникальных заказов
     """
+    POSSIBLE_LEVEL = 3
+    EXCEPT_LEVEL = 4
     with open(r'support_data/outloads/query_approved_orders.sql') as file:
         query = file.read().format(orders)
 
@@ -320,12 +334,12 @@ def approved_orders(orders: tuple) -> DataFrame:
         "uid=1C_Exchange;pwd=1"
     )
     data = read_sql_query(query, connection)
-    data['Закуп подтвержден'] = data['level_of_allowing'].map(lambda x: 1 if x >= 5 else 0)
+    data['Закуп подтвержден'] = data['level_of_allowing'].map(lambda x: 1 if x >= EXCEPT_LEVEL else 0)
     data['Закуп подтвержден'] = data['Закуп подтвержден'].where(
         data['number_order'].map(lambda x: False if x[1] == '0' else True),
         1
     )
-    data['Возможный заказ'] = data['level_of_allowing'].map(lambda x: 1 if x == 4 else 0)
+    data['Возможный заказ'] = data['level_of_allowing'].map(lambda x: 1 if x == POSSIBLE_LEVEL else 0)
     data = data.rename(columns={'number_order': 'Номер победы'})
 
     return data[['Номер победы', 'Закуп подтвержден', 'Возможный заказ']]

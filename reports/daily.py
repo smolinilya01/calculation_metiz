@@ -41,9 +41,10 @@ def deficit(table_: DataFrame) -> None:
     # table['Остаток дефицита'] = table['Остаток дефицита'] + table['Списание из Поступлений']
     table['Заказчик'] = table['Заказчик'].replace({0: 'Омский ЭМЗ', '0': 'Омский ЭМЗ'})
     table = table[
-        (table['Заказ обеспечен'] == 0) &
-        (table['Пометка удаления'] == 0) &
-        (table['Закуп подтвержден'] == 1)
+        ((table['Заказ обеспечен'] == 0) & (table['Пометка удаления'] == 0) &
+         (table['Закуп подтвержден'] == 1) & (table['Статус'] != "Закрыт") &
+         (table['Полная_отгрузка'] == 0) &
+         (table['Изделие.Вид номенклатуры'] != 'Металл под оцинковку'))
         ]
     table = table[need_columns]
 
@@ -158,7 +159,8 @@ def compare_with_prev_ask(table: DataFrame) -> DataFrame:
         path,
         sep=";",
         encoding='ansi',
-        parse_dates=['Дата запуска']
+        parse_dates=['Дата запуска'],
+        dtype={'Номер победы': str}
     )
     prev_data = prev_data[prev_data['Дата запуска'] <= end_date][need_columns]
 

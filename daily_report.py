@@ -76,7 +76,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    # chdir(r'C:\LOG_1\calculation_metal')  # что бы планировщик заданий переключался на правильную директорию
+    chdir(r'C:\LOG_1\calculation_metiz')  # что бы планировщик заданий переключался на правильную директорию
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',

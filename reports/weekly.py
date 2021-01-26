@@ -5,7 +5,7 @@ from etl.extract import (NOW, PATH_LON_SORT, replacements, nomenclature)
 from pandas import (
     DataFrame, pivot_table, Series, concat
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def weekly_tables(
@@ -211,12 +211,13 @@ def graph(table_: DataFrame, method: str) -> None:
         ].copy()
     # для схлопывания указанных гостов
     old_nomenclature = clean_for_graf[['Номенклатура', 'Код']].copy()
+    del old_nomenclature['Код']
     old_nomenclature['Номенклатура_с_заменами_гостов'] = clean_for_graf['Номенклатура'].map(
         lambda x: (x.
                    replace('ГОСТ 7798-70', 'ГОСТ Р ИСО 4014-2013').
                    replace('ГОСТ Р ИСО 4017-2013', 'ГОСТ Р ИСО 4014-2013').
                    replace('ГОСТ 5915-70', 'ГОСТ ISO 4032-2014'))
-    )
+    ).drop_duplicates()
     clean_for_graf['Номенклатура'] = clean_for_graf['Номенклатура'].map(
         lambda x: (x.
                    replace('ГОСТ 7798-70', 'ГОСТ Р ИСО 4014-2013').
@@ -239,7 +240,13 @@ def graph(table_: DataFrame, method: str) -> None:
     cum_column = graph_[graph_.columns[graph_.columns < NOW]].sum(axis=1)  # столбец с кумулятивными данными предыдущих дней
 
     combin_graph = graph_[need_date].copy()
-    combin_graph[need_date.iloc[0]] = cum_column + combin_graph[need_date.iloc[0]]
+    if len(combin_graph.columns) != 0:  # проблемный случай, если в промежутке от текущего дня до тек день + 2 дня нет данных, то сформировать как нулевые
+        combin_graph[need_date.iloc[0]] = cum_column + combin_graph[need_date.iloc[0]]
+    else:
+        combin_graph['first_column'] = cum_column
+        combin_graph['second_column'] = 0
+        combin_graph['third_column'] = 0
+        combin_graph.columns = [NOW, NOW + timedelta(days=1), NOW + timedelta(days=2)]
 
     # создание мультииндекса, где верхний уровень отклонение от первого дня
     columns = Series(combin_graph.columns).diff().map(extract_day).cumsum().replace({None: 0})
@@ -256,7 +263,7 @@ def graph(table_: DataFrame, method: str) -> None:
         how='left',
         copy=False
         )
-    del old_nomenclature['Номенклатура'], old_nomenclature['Код']
+    del old_nomenclature['Номенклатура']
     old_nomenclature = old_nomenclature.drop_duplicates().\
         set_index('Номенклатура_с_заменами_гостов')
     old_nomenclature.columns = [range(len(old_nomenclature.columns)), old_nomenclature.columns]
@@ -307,7 +314,10 @@ def make_unapproved_orders(data: DataFrame, sep_date: datetime) -> DataFrame:
         (data['Заказ обеспечен'] == 0) &
         (data['Пометка удаления'] == 0) &
         (data['Закуп подтвержден'] == 0) &
-        (data['Количество в заказе'] != 0) &
+        (data['Статус'] != "Закрыт") &
+        (data['Полная_отгрузка'] == 0) &
+        (data['Количество в заказе'] > 0) &
+        (data['Изделие.Вид номенклатуры'] != 'Металл под оцинковку') &
         (data['Дата запуска'] <= sep_date)
         ][[
             'Дата запуска', 'Заказ-Партия', 'Заказчик',
